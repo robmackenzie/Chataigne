@@ -30,6 +30,7 @@ ConditionManager::ConditionManager(Multiplex* multiplex) :
 	isValids.fill(false);
 	validationProgresses.fill(0);
 	validationTargets.fill(false);
+	resetCooldowns();
 
 	sequentialConditionIndices.resize(getMultiplexCount());
 
@@ -51,6 +52,16 @@ ConditionManager::ConditionManager(Multiplex* multiplex) :
 
 	invalidationTime = addFloatParameter("Invalidation Time", "If greater than 0, the conditions will be invalidated only if they remain invalid for this amount of time, when coming from a valid state", 0, 0, (float)INT32_MAX);
 	invalidationTime->defaultUI = FloatParameter::TIME;
+
+	validationCooldown = addFloatParameter("Validation Cooldown", "If greater than 0, the conditions won't be validated again until this amount of time has passed since the last validation. Validations happening during the cooldown are ignored", 0, 0, (float)INT32_MAX);
+	validationCooldown->defaultUI = FloatParameter::TIME;
+
+	invalidationCooldown = addFloatParameter("Invalidation Cooldown", "If greater than 0, the conditions won't be invalidated again until this amount of time has passed since the last invalidation. Invalidations happening during the cooldown are ignored", 0, 0, (float)INT32_MAX);
+	invalidationCooldown->defaultUI = FloatParameter::TIME;
+
+	cooldownMode = addEnumParameter("During Cooldown", "What to do when the conditions change during a cooldown.\nApply When Cooldown Ends will apply the change when the cooldown is over, if the conditions are still in that state.\nIgnore will discard the change, the conditions will need to change again after the cooldown.");
+	cooldownMode->addOption("Apply When Cooldown Ends", COOLDOWN_APPLY_WHEN_ENDED)->addOption("Ignore", COOLDOWN_IGNORE);
+	cooldownMode->setEnabled(false);
 
 	validationProgressFeedback = addFloatParameter("Validation Progress", "The feedback of the progress if validation time is more than 0", 0, 0, 1, false);
 	validationProgressFeedback->setControllableFeedbackOnly(true);
@@ -80,6 +91,7 @@ void ConditionManager::multiplexCountChanged()
 	validationProgresses.fill(0);
 	validationTargets.fill(false);
 	sequentialConditionIndices.fill(0);
+	resetCooldowns();
 }
 
 void ConditionManager::multiplexPreviewIndexChanged()
@@ -167,9 +179,29 @@ void ConditionManager::setForceDisabled(bool value, bool force)
 	for (int i = 0; i < getMultiplexCount(); i++) checkAllConditions(i);
 }
 
-void ConditionManager::setValid(int multiplexIndex, bool value, bool dispatchOnlyOnValidationChange)
+void ConditionManager::setValid(int multiplexIndex, bool value, bool dispatchOnlyOnValidationChange, bool checkCooldown)
 {
 	if (isValids[multiplexIndex] == value && dispatchOnlyOnValidationChange) return;
+
+	if (checkCooldown)
+	{
+		if (isInCooldown(multiplexIndex, value))
+		{
+			if (cooldownMode->getValueDataAsEnum<CooldownMode>() == COOLDOWN_APPLY_WHEN_ENDED)
+			{
+				double lastTime = value ? lastValidationTimes[multiplexIndex] : lastInvalidationTimes[multiplexIndex];
+				float cooldown = value ? validationCooldown->floatValue() : invalidationCooldown->floatValue();
+				int remainingMs = jmax(1, (int)std::ceil((lastTime + cooldown - Time::getMillisecondCounterHiRes() / 1000.0) * 1000));
+				startTimer(cooldownTimerIDOffset + multiplexIndex, remainingMs);
+			}
+			return;
+		}
+
+		double curTime = Time::getMillisecondCounterHiRes() / 1000.0;
+		if (value) lastValidationTimes.set(multiplexIndex, curTime);
+		else lastInvalidationTimes.set(multiplexIndex, curTime);
+	}
+
 	isValids.set(multiplexIndex, value);
 
 	dispatchConditionValidationChanged(multiplexIndex, dispatchOnlyOnValidationChange);
@@ -186,10 +218,37 @@ void ConditionManager::setValid(int multiplexIndex, bool value, bool dispatchOnl
 		if (nextIndex == items.size()) nextIndex = 0;
 
 		setSequentialConditionIndices(nextIndex, multiplexIndex);
-		setValid(multiplexIndex, false);
+		setValid(multiplexIndex, false, true, false); //internal reset, not subject to invalidation cooldown
 	}
 
 
+}
+
+bool ConditionManager::isInCooldown(int multiplexIndex, bool value)
+{
+	float cooldown = value ? validationCooldown->floatValue() : invalidationCooldown->floatValue();
+	if (cooldown <= 0) return false;
+
+	double lastTime = value ? lastValidationTimes[multiplexIndex] : lastInvalidationTimes[multiplexIndex];
+	return Time::getMillisecondCounterHiRes() / 1000.0 - lastTime < cooldown;
+}
+
+void ConditionManager::cooldownEnded(int multiplexIndex)
+{
+	if (forceDisabled || multiplexIndex >= getMultiplexCount()) return;
+	if (isTimerRunning(multiplexIndex)) return; //validation / invalidation time is running, it will apply the change itself
+	if (validationTargets[multiplexIndex] == isValids[multiplexIndex]) return; //conditions went back during the cooldown
+
+	setValid(multiplexIndex, validationTargets[multiplexIndex]);
+	if (useValidationProgress) setValidationProgress(multiplexIndex, isValids[multiplexIndex] ? 1 : 0);
+}
+
+void ConditionManager::resetCooldowns()
+{
+	lastValidationTimes.resize(getMultiplexCount());
+	lastInvalidationTimes.resize(getMultiplexCount());
+	lastValidationTimes.fill(std::numeric_limits<double>::lowest());
+	lastInvalidationTimes.fill(std::numeric_limits<double>::lowest());
 }
 
 void ConditionManager::setValidationProgress(int multiplexIndex, float value)
@@ -240,8 +299,9 @@ void ConditionManager::checkAllConditions(int multiplexIndex, bool emptyIsValid,
 		setValid(multiplexIndex, valid, dispatchOnlyOnValidationChange);
 		validationTargets.set(multiplexIndex, valid);
 
-		if (valid && invalidationTime->floatValue() > 0) setValidationProgress(multiplexIndex, 1);
-		else if (!valid && validationTime->floatValue() > 0) setValidationProgress(multiplexIndex, 0);
+		//use isValids rather than valid, as the change may have been dropped by a cooldown
+		if (isValids[multiplexIndex] && invalidationTime->floatValue() > 0) setValidationProgress(multiplexIndex, 1);
+		else if (!isValids[multiplexIndex] && validationTime->floatValue() > 0) setValidationProgress(multiplexIndex, 0);
 
 	}
 	else if (valid != validationTargets[multiplexIndex])
@@ -314,10 +374,28 @@ void ConditionManager::onContainerParameterChanged(Parameter* p)
 		useValidationProgress = validationTime->floatValue() > 0 || invalidationTime->floatValue() > 0;
 		validationProgressFeedback->setEnabled(useValidationProgress);
 	}
+	else if (p == validationCooldown || p == invalidationCooldown)
+	{
+		cooldownMode->setEnabled(validationCooldown->floatValue() > 0 || invalidationCooldown->floatValue() > 0);
+	}
+	else if (p == cooldownMode)
+	{
+		if (cooldownMode->getValueDataAsEnum<CooldownMode>() == COOLDOWN_IGNORE)
+		{
+			for (int i = 0; i < getMultiplexCount(); i++) stopTimer(cooldownTimerIDOffset + i);
+		}
+	}
 }
 
 void ConditionManager::timerCallback(int id)
 {
+	if (id >= cooldownTimerIDOffset)
+	{
+		stopTimer(id);
+		cooldownEnded(id - cooldownTimerIDOffset);
+		return;
+	}
+
 	if (!useValidationProgress)
 	{
 		setValid(id, validationTargets[id]);
@@ -340,6 +418,7 @@ void ConditionManager::timerCallback(int id)
 	if (validationProgresses[id] == (int)targetIsValid)
 	{
 		setValid(id, validationTargets[id]);
+		if (isValids[id] != targetIsValid) setValidationProgress(id, isValids[id] ? 1 : 0); //dropped by cooldown
 		stopTimer(id);
 	}
 }
