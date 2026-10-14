@@ -35,6 +35,16 @@ ActionUI::ActionUI(Action* _action, bool showMiniModeBT) :
 		progressionUI->setVisible(action->cdm->validationTime->floatValue() > 0);
 	}
 
+	if (action->cdm != nullptr && action->cdm->cooldownProgressFeedback != nullptr)
+	{
+		cooldownUI.reset(action->cdm->cooldownProgressFeedback->createSlider());
+		cooldownUI->customFGColor = Colours::orange;
+		cooldownUI->useCustomFGColor = true;
+		cooldownUI->showValue = false;
+		addChildComponent(cooldownUI.get());
+		updateCooldownUI();
+	}
+
 	if (action->csmOn != nullptr && action->csmOn->staggerProgression != nullptr)
 	{
 		action->csmOn->addAsyncConsequenceManagerListener(this);
@@ -88,6 +98,11 @@ void ActionUI::controllableFeedbackUpdateInternal(Controllable* c)
 			resized();
 		}
 	}
+
+	if (action->cdm != nullptr && (c == action->cdm->validationCooldown || c == action->cdm->invalidationCooldown) && cooldownUI != nullptr)
+	{
+		updateCooldownUI();
+	}
 }
 
 void ActionUI::updateStaggerUI()
@@ -96,6 +111,16 @@ void ActionUI::updateStaggerUI()
 	if (staggerUI->isVisible() != v)
 	{
 		staggerUI->setVisible(v);
+		resized();
+	}
+}
+
+void ActionUI::updateCooldownUI()
+{
+	bool v = action->cdm->validationCooldown->floatValue() > 0 || action->cdm->invalidationCooldown->floatValue() > 0;
+	if (cooldownUI->isVisible() != v)
+	{
+		cooldownUI->setVisible(v);
 		resized();
 	}
 }
@@ -109,6 +134,11 @@ void ActionUI::resizedInternalHeader(Rectangle<int>& r)
 	if (progressionUI != nullptr && progressionUI->isVisible())
 	{
 		progressionUI->setBounds(r.removeFromRight(40).reduced(2, 6));
+	}
+
+	if (cooldownUI != nullptr && cooldownUI->isVisible())
+	{
+		cooldownUI->setBounds(r.removeFromRight(40).reduced(2, 6));
 	}
 
 	if (staggerUI != nullptr && staggerUI->isVisible())

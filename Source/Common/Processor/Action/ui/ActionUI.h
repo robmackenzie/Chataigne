@@ -23,6 +23,7 @@ public:
 	Action* action;
 	std::unique_ptr<TriggerButtonUI> triggerUI;
 	std::unique_ptr<FloatSliderUI> progressionUI;
+	std::unique_ptr<FloatSliderUI> cooldownUI;
 	std::unique_ptr<FloatSliderUI> staggerUI;
 
 	virtual void paint(Graphics& g) override;
@@ -30,6 +31,7 @@ public:
 	void controllableFeedbackUpdateInternal(Controllable* c) override;
 
 	void updateStaggerUI();
+	void updateCooldownUI();
 
 	virtual void resizedInternalHeader(Rectangle<int>& r) override;
 	virtual void paintOverChildren(Graphics& g) override;

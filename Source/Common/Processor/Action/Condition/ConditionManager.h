@@ -27,6 +27,7 @@ public:
 	enum ConditionOperator { AND, OR, SEQUENTIAL };
 	enum CooldownMode { COOLDOWN_APPLY_WHEN_ENDED, COOLDOWN_IGNORE };
 	static const int cooldownTimerIDOffset = 1 << 24;
+	static const int cooldownProgressTimerIDOffset = 2 << 24;
 	EnumParameter* conditionOperator;
 	Array<int> sequentialConditionIndices;
 
@@ -35,6 +36,7 @@ public:
 	FloatParameter* validationCooldown;
 	FloatParameter* invalidationCooldown;
 	EnumParameter* cooldownMode;
+	FloatParameter* cooldownProgressFeedback;
 	FloatParameter* validationProgressFeedback;
 
 	Array<bool> isValids;
@@ -43,6 +45,7 @@ public:
 	Array<double> prevTimerTimes;
 	Array<double> lastValidationTimes;
 	Array<double> lastInvalidationTimes;
+	Array<float> cooldownProgresses;
 
 	bool forceDisabled;
 	bool useValidationProgress;
@@ -65,6 +68,8 @@ public:
 	bool isInCooldown(int multiplexIndex, bool value);
 	void resetCooldowns();
 	void cooldownEnded(int multiplexIndex);
+	void updateCooldownProgress(int multiplexIndex);
+	void setCooldownProgress(int multiplexIndex, float value);
 	void setValidationProgress(int multiplexIndex, float value);
 
 	void setSequentialConditionIndices(int index, int multiplexIndex = -1);
