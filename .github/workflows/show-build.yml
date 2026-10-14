@@ -1,0 +1,86 @@
+# Fork-only build for the show branch: Apple Silicon app, kept as a workflow artifact.
+# Steps follow the OSX job of build.yml at 1.10.4.
+
+name: Show Build
+
+on:
+  push:
+    branches: [show]
+
+env:
+  ProjectName: Chataigne
+
+jobs:
+  osx-silicon:
+    name: OSX (arm64, silicon)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
+      - name: Checkout JUCE
+        uses: actions/checkout@v2
+        with:
+          repository: benkuper/JUCE
+          ref: develop-local
+          path: JUCE
+
+      - name: Setup XCode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.6.0'
+
+      - name: Build
+        uses: sersoft-gmbh/xcodebuild-action@v2.0.1
+        with:
+          project: Builds/MacOSX_CI/${{ env.ProjectName }}.xcodeproj
+          destination: platform=macOS
+          jobs: 2
+          action: build
+          arch: arm64
+          configuration: ReleaseSilicon
+          use-xcpretty: true
+
+      - name: Bundle Libraries
+        run: |
+          APP_PATH="Release/${{ env.ProjectName }}.app"
+          if [ ! -d "$APP_PATH" ]; then
+             echo "::error::App not found at '$APP_PATH'."
+             ls -F
+             exit 1
+          fi
+
+          FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+          EXECUTABLE="$APP_PATH/Contents/MacOS/${{ env.ProjectName }}"
+          mkdir -p "$FRAMEWORKS_DIR"
+
+          cp External/mosquitto/lib/osx/libmosquitto.dylib "$FRAMEWORKS_DIR/"
+          cp External/mosquitto/lib/osx/libmosquittopp.dylib "$FRAMEWORKS_DIR/"
+          cp External/mosquitto/lib/osx/libssl.dylib "$FRAMEWORKS_DIR/"
+          cp External/mosquitto/lib/osx/libcrypto.dylib "$FRAMEWORKS_DIR/"
+
+          install_name_tool -id @rpath/libmosquitto.dylib "$FRAMEWORKS_DIR/libmosquitto.dylib"
+          install_name_tool -id @rpath/libmosquittopp.dylib "$FRAMEWORKS_DIR/libmosquittopp.dylib"
+          install_name_tool -id @rpath/libssl.dylib "$FRAMEWORKS_DIR/libssl.dylib"
+          install_name_tool -id @rpath/libcrypto.dylib "$FRAMEWORKS_DIR/libcrypto.dylib"
+
+          install_name_tool -change /usr/local/lib/libmosquitto.dylib @rpath/libmosquitto.dylib "$FRAMEWORKS_DIR/libmosquittopp.dylib" || true
+          install_name_tool -change libmosquitto.dylib @rpath/libmosquitto.dylib "$FRAMEWORKS_DIR/libmosquittopp.dylib" || true
+          install_name_tool -change libssl.dylib @rpath/libssl.dylib "$FRAMEWORKS_DIR/libmosquittopp.dylib" || true
+          install_name_tool -change libcrypto.dylib @rpath/libcrypto.dylib "$FRAMEWORKS_DIR/libmosquittopp.dylib" || true
+
+          install_name_tool -add_rpath @executable_path/../Frameworks "$EXECUTABLE" || true
+
+          codesign --force --deep --sign - "$APP_PATH"
+
+      - name: Zip App
+        run: ditto -c -k --keepParent "Release/${{ env.ProjectName }}.app" "${{ env.ProjectName }}-show-silicon.app.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ProjectName }}-show-silicon-${{ github.run_number }}
+          path: ${{ env.ProjectName }}-show-silicon.app.zip
