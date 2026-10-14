@@ -1,11 +1,11 @@
-# Fork-only build for the show branch: Apple Silicon app, kept as a workflow artifact.
+# Fork-only build for the halloween_2026_build branch: Apple Silicon app, kept as a workflow artifact.
 # Steps follow the OSX job of build.yml at 1.10.4.
 
 name: Show Build
 
 on:
   push:
-    branches: [show]
+    branches: [halloween_2026_build]
 
 env:
   ProjectName: Chataigne
