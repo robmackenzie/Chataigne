@@ -25,17 +25,24 @@ public:
 	BaseFactoryDefinition<Condition>* deactivateDef;
 
 	enum ConditionOperator { AND, OR, SEQUENTIAL };
+	enum CooldownMode { COOLDOWN_APPLY_WHEN_ENDED, COOLDOWN_IGNORE };
+	static const int cooldownTimerIDOffset = 1 << 24;
 	EnumParameter* conditionOperator;
 	Array<int> sequentialConditionIndices;
 
 	FloatParameter* validationTime;
 	FloatParameter* invalidationTime;
+	FloatParameter* validationCooldown;
+	FloatParameter* invalidationCooldown;
+	EnumParameter* cooldownMode;
 	FloatParameter* validationProgressFeedback;
 
 	Array<bool> isValids;
 	Array<float> validationProgresses;
 	Array<bool> validationTargets;
 	Array<double> prevTimerTimes;
+	Array<double> lastValidationTimes;
+	Array<double> lastInvalidationTimes;
 
 	bool forceDisabled;
 	bool useValidationProgress;
@@ -54,7 +61,10 @@ public:
 
 	void setForceDisabled(bool value, bool force = false);
 
-	void setValid(int multiplexIndex, bool value, bool dispatchOnlyOnValidationChange = true);
+	void setValid(int multiplexIndex, bool value, bool dispatchOnlyOnValidationChange = true, bool checkCooldown = true);
+	bool isInCooldown(int multiplexIndex, bool value);
+	void resetCooldowns();
+	void cooldownEnded(int multiplexIndex);
 	void setValidationProgress(int multiplexIndex, float value);
 
 	void setSequentialConditionIndices(int index, int multiplexIndex = -1);
