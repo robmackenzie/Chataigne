@@ -47,11 +47,18 @@ ConditionManager::ConditionManager(Multiplex* multiplex) :
 
 	managerFactory = &factory;
 
+	validationTimingEnabled = addBoolParameter("Use Validation Time", "If checked, shows the Validation Time and Invalidation Time options. Unchecking resets them", false);
+
 	validationTime = addFloatParameter("Validation Time", "If greater than 0, the conditions will be validated only if they remain valid for this amount of time, when coming from an invalid state", 0, 0, (float)INT32_MAX);
 	validationTime->defaultUI = FloatParameter::TIME;
 
 	invalidationTime = addFloatParameter("Invalidation Time", "If greater than 0, the conditions will be invalidated only if they remain invalid for this amount of time, when coming from a valid state", 0, 0, (float)INT32_MAX);
 	invalidationTime->defaultUI = FloatParameter::TIME;
+
+	validationProgressFeedback = addFloatParameter("Validation Progress", "The feedback of the progress if validation time is more than 0", 0, 0, 1, false);
+	validationProgressFeedback->setControllableFeedbackOnly(true);
+
+	cooldownEnabled = addBoolParameter("Use Cooldown", "If checked, shows the Validation Cooldown and Invalidation Cooldown options. Unchecking resets them", false);
 
 	validationCooldown = addFloatParameter("Validation Cooldown", "If greater than 0, the conditions won't be validated again until this amount of time has passed since the last validation. Validations happening during the cooldown are ignored", 0, 0, (float)INT32_MAX);
 	validationCooldown->defaultUI = FloatParameter::TIME;
@@ -67,8 +74,7 @@ ConditionManager::ConditionManager(Multiplex* multiplex) :
 	cooldownProgressFeedback->setControllableFeedbackOnly(true);
 	cooldownProgressFeedback->setEnabled(false);
 
-	validationProgressFeedback = addFloatParameter("Validation Progress", "The feedback of the progress if validation time is more than 0", 0, 0, 1, false);
-	validationProgressFeedback->setControllableFeedbackOnly(true);
+	updateTimingVisibility();
 
 	conditionOperator = addEnumParameter("Operator", "Operator for this manager, will decides how the conditions are validated.\nAND will need all conditions to be true. \
 OR will need at least one condition to be true. \
@@ -398,6 +404,24 @@ void ConditionManager::onContainerParameterChanged(Parameter* p)
 			checkAllConditions(i);
 		}
 	}
+	else if (p == validationTimingEnabled || p == cooldownEnabled)
+	{
+		if (!validationTimingEnabled->boolValue())
+		{
+			validationTime->resetValue();
+			invalidationTime->resetValue();
+		}
+
+		if (!cooldownEnabled->boolValue())
+		{
+			validationCooldown->resetValue();
+			invalidationCooldown->resetValue();
+			cooldownMode->resetValue();
+		}
+
+		updateTimingVisibility();
+		queuedNotifier.addMessage(new ContainerAsyncEvent(ContainerAsyncEvent::ControllableContainerNeedsRebuild, this));
+	}
 	else if (p == validationTime || p == invalidationTime)
 	{
 		useValidationProgress = validationTime->floatValue() > 0 || invalidationTime->floatValue() > 0;
@@ -477,8 +501,26 @@ void ConditionManager::timerCallback(int id)
 	}
 }
 
+void ConditionManager::updateTimingVisibility()
+{
+	bool showTiming = validationTimingEnabled->boolValue();
+	validationTime->hideInEditor = !showTiming;
+	invalidationTime->hideInEditor = !showTiming;
+	validationProgressFeedback->hideInEditor = !showTiming;
+
+	bool showCooldown = cooldownEnabled->boolValue();
+	validationCooldown->hideInEditor = !showCooldown;
+	invalidationCooldown->hideInEditor = !showCooldown;
+	cooldownMode->hideInEditor = !showCooldown;
+	cooldownProgressFeedback->hideInEditor = !showCooldown;
+}
+
 void ConditionManager::afterLoadJSONDataInternal()
 {
+	//sessions saved before these checkboxes existed only have the times
+	if (validationTime->floatValue() > 0 || invalidationTime->floatValue() > 0) validationTimingEnabled->setValue(true);
+	if (validationCooldown->floatValue() > 0 || invalidationCooldown->floatValue() > 0) cooldownEnabled->setValue(true);
+
 	for (int i = 0; i < getMultiplexCount(); i++) checkAllConditions(i);
 }
 

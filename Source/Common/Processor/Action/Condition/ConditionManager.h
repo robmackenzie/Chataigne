@@ -31,8 +31,10 @@ public:
 	EnumParameter* conditionOperator;
 	Array<int> sequentialConditionIndices;
 
+	BoolParameter* validationTimingEnabled;
 	FloatParameter* validationTime;
 	FloatParameter* invalidationTime;
+	BoolParameter* cooldownEnabled;
 	FloatParameter* validationCooldown;
 	FloatParameter* invalidationCooldown;
 	EnumParameter* cooldownMode;
@@ -68,6 +70,7 @@ public:
 	bool isInCooldown(int multiplexIndex, bool value);
 	void resetCooldowns();
 	void cooldownEnded(int multiplexIndex);
+	void updateTimingVisibility();
 	void updateCooldownProgress(int multiplexIndex);
 	void setCooldownProgress(int multiplexIndex, float value);
 	void setValidationProgress(int multiplexIndex, float value);
