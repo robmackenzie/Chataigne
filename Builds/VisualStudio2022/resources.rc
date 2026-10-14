@@ -18,9 +18,9 @@ BEGIN
       VALUE "CompanyName",  "Ben Kuper\0"
       VALUE "LegalCopyright",  "Ben Kuper\0"
       VALUE "FileDescription",  "Chataigne\0"
-      VALUE "FileVersion",  "1.10.4\0"
+      VALUE "FileVersion",  "1.10.4halloween1\0"
       VALUE "ProductName",  "Chataigne\0"
-      VALUE "ProductVersion",  "1.10.4\0"
+      VALUE "ProductVersion",  "1.10.4halloween1\0"
     END
   END
 
