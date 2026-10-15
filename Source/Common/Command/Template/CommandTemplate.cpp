@@ -94,6 +94,11 @@ void CommandTemplate::generateParametersFromDefinition(CommandDefinition * def)
 	c->clear();
 }
 
+void CommandTemplate::updateTemplateParams()
+{
+	if (updateTemplateParamsFunc) updateTemplateParamsFunc(this);
+}
+
 BaseCommand * CommandTemplate::createCommand(Module * m, CommandContext context, var params, Multiplex * multiplex)
 {
 	//HERE must find a solution to create the different commands
@@ -124,6 +129,7 @@ void CommandTemplate::onControllableFeedbackUpdateInternal(ControllableContainer
 	CommandTemplateParameter * ctp = c->getParentAs<CommandTemplateParameter>();
 	if (ctp != nullptr)
 	{
+		updateTemplateParams();
 		templateListeners.call(&TemplateListener::templateParameterChanged, ctp);
 	}
 	//if (cc == &arguments) modelListeners.call(&ModelListener::commandModelArgumentsChanged, this);
@@ -194,6 +200,8 @@ void CommandTemplate::loadJSONDataInternal(var data)
 	{
 		customValuesManager->loadJSONData(data.getProperty("customValues",var()));
 	}
+
+	updateTemplateParams();
 
 	
 }

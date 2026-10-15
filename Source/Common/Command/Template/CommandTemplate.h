@@ -34,6 +34,10 @@ public:
 	OwnedArray<CommandTemplateParameter> templateParams;
 	std::unique_ptr<CustomValuesCommandArgumentManager> customValuesManager;
 
+	//set by commands whose parameters depend on other parameters (e.g. MIDI Note Mode), to show only the relevant template parameters
+	std::function<void(CommandTemplate*)> updateTemplateParamsFunc;
+	void updateTemplateParams();
+
 	void generateParametersFromDefinition(CommandDefinition* def);
 
 	BaseCommand* createCommand(Module* m, CommandContext context, var params, Multiplex* multiplex = nullptr);

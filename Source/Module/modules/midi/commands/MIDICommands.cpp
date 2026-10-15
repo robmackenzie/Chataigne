@@ -115,7 +115,7 @@ void MIDINoteAndCCCommand::updateNoteParams()
 	{
 		int pitch = getPitchFromNote(0);
 		number = new IntParameter("Pitch", "The pitch of the note", 0, 0, 127);
-		number->setValue(pitch);
+		if (linkedTemplate == nullptr) number->setValue(pitch); //with a template, leave it at default so the template's pitch is applied below
 
 		removeControllable(noteEnum);
 		removeControllable(octave);
@@ -125,7 +125,52 @@ void MIDINoteAndCCCommand::updateNoteParams()
 		addParameter(number, controllables.indexOf(channel) + 1);
 	}
 
+	//the parameters for the new mode were just created, apply the template's values to them
+	if (linkedTemplate != nullptr) updateParametersFromTemplate();
+}
 
+void MIDINoteAndCCCommand::setupTemplateParameters(CommandTemplate* ct)
+{
+	MIDICommand::setupTemplateParameters(ct);
+	if (noteMode == nullptr) return;
+
+	//templates are generated in note mode, also add the pitch so it can be set when the template's Note Mode is Pitch
+	IntParameter pitchParam("Pitch", "The pitch of the note", getPitchFromNote(0), 0, 127);
+	CommandTemplateParameter* pitchCtp = new CommandTemplateParameter(&pitchParam);
+
+	int index = -1;
+	for (int i = 0; i < ct->paramsContainer.controllableContainers.size(); i++)
+	{
+		if (ct->paramsContainer.controllableContainers[i]->niceName == "Octave") index = i + 1;
+	}
+	ct->paramsContainer.addChildControllableContainer(pitchCtp, false, index);
+	ct->templateParams.add(pitchCtp);
+
+	ct->updateTemplateParamsFunc = &MIDINoteAndCCCommand::updateTemplateNoteParams;
+	updateTemplateNoteParams(ct);
+}
+
+void MIDINoteAndCCCommand::updateTemplateNoteParams(CommandTemplate* ct)
+{
+	CommandTemplateParameter* modeCtp = dynamic_cast<CommandTemplateParameter*>(ct->paramsContainer.getControllableContainerByName("Note Mode", true));
+	EnumParameter* modeParam = modeCtp != nullptr ? dynamic_cast<EnumParameter*>(modeCtp->parameter) : nullptr;
+	if (modeParam == nullptr) return;
+
+	bool isPitch = modeParam->getValueDataAsEnum<NoteMode>() == MODE_PITCH;
+
+	bool changed = false;
+	for (auto& name : StringArray("Note", "Octave", "Pitch"))
+	{
+		ControllableContainer* ctp = ct->paramsContainer.getControllableContainerByName(name, true);
+		if (ctp == nullptr) continue;
+
+		bool hide = (name == "Pitch") != isPitch;
+		if (ctp->hideInEditor == hide) continue;
+		ctp->hideInEditor = hide;
+		changed = true;
+	}
+
+	if (changed) ct->paramsContainer.queuedNotifier.addMessage(new ContainerAsyncEvent(ContainerAsyncEvent::ControllableContainerNeedsRebuild, &ct->paramsContainer));
 }
 
 void MIDINoteAndCCCommand::setValue(var value, int multiplexIndex)

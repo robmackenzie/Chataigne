@@ -61,6 +61,9 @@ public:
 
 	int getPitchFromNote(int multiplexIndex);
 
+	void setupTemplateParameters(CommandTemplate* ct) override;
+	static void updateTemplateNoteParams(CommandTemplate* ct);
+
 
 	void onContainerParameterChanged(Parameter* p) override;
 
